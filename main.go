@@ -5,128 +5,11 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"math"
 	"os"
 
-	"github.com/go-gl/mathgl/mgl32" // Импорт библиотеки
+	"github.com/go-gl/mathgl/mgl32"
 )
 
-type BilinearPatch struct {
-	P00                    mgl32.Vec3
-	P01                    mgl32.Vec3
-	P10                    mgl32.Vec3
-	P11                    mgl32.Vec3
-	minU, minV, maxU, maxV float32
-}
-
-type BoundBox struct {
-	Min mgl32.Vec3
-	Max mgl32.Vec3
-}
-
-type Sample struct {
-	X, Y, Z float32
-}
-
-func (bp *BilinearPatch) toBoundBox() BoundBox {
-	boundBox := BoundBox{}
-	boundBox.Min = mgl32.Vec3{
-		min(bp.P00.X(), bp.P01.X(), bp.P10.X(), bp.P11.X()),
-		min(bp.P00.Y(), bp.P01.Y(), bp.P10.Y(), bp.P11.Y()),
-		min(bp.P00.Z(), bp.P01.Z(), bp.P10.Z(), bp.P11.Z()),
-	}
-	boundBox.Max = mgl32.Vec3{
-		max(bp.P00.X(), bp.P01.X(), bp.P10.X(), bp.P11.X()),
-		max(bp.P00.Y(), bp.P01.Y(), bp.P10.Y(), bp.P11.Y()),
-		max(bp.P00.Z(), bp.P01.Z(), bp.P10.Z(), bp.P11.Z()),
-	}
-
-	return boundBox
-}
-
-func edgeFunction2D(a, b mgl32.Vec3, x, y float32) float32 {
-	return (x-a.X())*(b.Y()-a.Y()) -
-		(y-a.Y())*(b.X()-a.X())
-}
-
-func (bp *BilinearPatch) insideQuad(sample Sample) bool {
-	return edgeFunction2D(bp.P00, bp.P01, sample.X, sample.Y) >= 0 &&
-		edgeFunction2D(bp.P01, bp.P11, sample.X, sample.Y) >= 0 &&
-		edgeFunction2D(bp.P11, bp.P10, sample.X, sample.Y) >= 0 &&
-		edgeFunction2D(bp.P10, bp.P00, sample.X, sample.Y) >= 0
-}
-
-// Evaluate возвращает точку на поверхности патча для заданных параметров u и v.
-func EvaluateBilinear(p00, p10, p01, p11 mgl32.Vec3, u, v float32) mgl32.Vec3 {
-	// Формула билинейной интерполяции:
-	// P(u,v) = (1-u)(1-v)P00 + u(1-v)P10 + (1-u)vP01 + uvP11
-
-	term00 := p00.Mul(1.0 - u).Mul(1.0 - v)
-	term10 := p10.Mul(u).Mul(1.0 - v)
-	term01 := p01.Mul(1.0 - u).Mul(v)
-	term11 := p11.Mul(u).Mul(v)
-
-	return term00.Add(term10).Add(term01).Add(term11)
-}
-
-// Evaluate возвращает точку на поверхности патча для заданных параметров u и v.
-func (bp *BilinearPatch) Evaluate(u, v float32) mgl32.Vec3 {
-	return EvaluateBilinear(bp.P00, bp.P10, bp.P01, bp.P11, u, v)
-}
-
-func (bound *BoundBox) Contains(point Sample) bool {
-	return point.X >= bound.Min.X() && point.X <= bound.Max.X() &&
-		point.Y >= bound.Min.Y() && point.Y <= bound.Max.Y() &&
-		point.Z >= bound.Min.Z() && point.Z <= bound.Max.Z()
-}
-
-func (bp *BilinearPatch) Split(level int, uMin, uMax, vMin, vMax float32) []BilinearPatch {
-	if level <= 0 { // Мы возвращаем патч, который был вычислен на основе этих границ
-		return []BilinearPatch{{
-			P00:  bp.Evaluate(uMin, vMin),
-			P01:  bp.Evaluate(uMin, vMax),
-			P10:  bp.Evaluate(uMax, vMin),
-			P11:  bp.Evaluate(uMax, vMax),
-			minU: uMin,
-			minV: vMin,
-			maxU: uMax,
-			maxV: vMax,
-		}}
-	}
-
-	var subPatches []BilinearPatch
-	midU := (uMin + uMax) / 2.0
-	midV := (vMin + vMax) / 2.0
-
-	// Определяем 4 квадранта: {uStart, uEnd, vStart, vEnd}
-	quads := [4][4]float32{
-		{uMin, midU, vMin, midV}, // BL (P00)
-		{uMin, midU, midV, vMax}, // TL (P01)
-		{midU, uMax, vMin, midV}, // BR (P10)
-		{midU, uMax, midV, vMax}, // TR (P11)
-	}
-
-	for _, q := range quads {
-		u0, u1, v0, v1 := q[0], q[1], q[2], q[3]
-
-		// ВАЖНО: Мы создаем новый патч, вычисляя его углы через Evaluate
-		// используя параметры U и V.
-		// Это гарантирует, что геометрия будет идеально соответствовать текстуре!
-		// newPatch := BilinearPatch{
-		// 	P00: bp.Evaluate(u0, v0),
-		// 	P01: bp.Evaluate(u0, v1),
-		// 	P10: bp.Evaluate(u1, v0),
-		// 	P11: bp.Evaluate(u1, v1),
-		// 	U:   u0, // Сохраняем глобальный U для текстурирования
-		// 	V:   v0, // Сохраняем глобальный V для текстурирования
-		// }
-
-		// Рекурсия
-		subPatches = append(subPatches, bp.Split(level-1, u0, u1, v0, v1)...)
-	}
-
-	return subPatches
-}
 func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	bounds := img.Bounds()
 	w, h := float32(bounds.Dx()), float32(bounds.Dy())
@@ -181,21 +64,6 @@ func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	}
 }
 
-func (bq *BilinearPatch) inverseAffineQuad(sample Sample) (u, v float32) {
-	B := bq.P10.Sub(bq.P00)
-	C := bq.P01.Sub(bq.P00)
-	rhs := mgl32.Vec3{sample.X, sample.Y, 0.0}.Sub(bq.P00)
-	det := B.X()*C.Y() - B.Y()*C.X()
-
-	if math.Abs(float64(det)) < 1e-10 {
-		return 0, 0
-	}
-	u = (rhs.X()*C.Y() - rhs.Y()*C.X()) / det
-	v = (B.X()*rhs.Y() - B.Y()*rhs.X()) / det
-
-	return u, v
-}
-
 func main() {
 	file, err := os.Open("Roket.png")
 	if err != nil {
@@ -217,63 +85,63 @@ func main() {
 
 	fmt.Printf("Размер: %d x %d\n", twidth, theight)
 
-	bp := BilinearPatch{}
-	bp.P00 = mgl32.Vec3{0.0, 0.0, 0.0}
-	bp.P01 = mgl32.Vec3{0.0, 500.0, 0.0}
-	bp.P11 = mgl32.Vec3{500.0, 500.0, 0.0}
-	bp.P10 = mgl32.Vec3{800.0, 200.0, 0.0}
+	model, err := LoadObj("models/cube.obj")
+	allPaches := make([]BilinearPatch, 0, 100)
 
-	mesh := bp.Split(6, 0.0, 1.0, 0.0, 1.0)
-
-	bounds := make([]BoundBox, len(mesh))
-
-	for index, patch := range mesh {
-		bounds[index] = patch.toBoundBox()
+	for _, patch := range model.patches {
+		allPaches = append(allPaches, patch.Split(6, 0.0, 1.0, 0.0, 1.0)...)
 	}
 
 	// 1. Параметры изображения
 	width, height := 800, 600
 
+	fovyRad := mgl32.DegToRad(60)
+	proj := PerspectiveZO(fovyRad, float32(width)/float32(height), 0.1, 20)
+
+	for i, patch := range allPaches {
+		allPaches[i].P00 = Project(patch.P00, mgl32.Ident4(), proj, 0, 0, width, height)
+		allPaches[i].P01 = Project(patch.P01, mgl32.Ident4(), proj, 0, 0, width, height)
+		allPaches[i].P10 = Project(patch.P10, mgl32.Ident4(), proj, 0, 0, width, height)
+		allPaches[i].P11 = Project(patch.P11, mgl32.Ident4(), proj, 0, 0, width, height)
+	}
+
+	bounds := make([]BoundBox, len(allPaches))
+
+	for index, patch := range allPaches {
+		bounds[index] = patch.toBoundBox()
+	}
+
 	// 2. Создаем "холст" (RGBA — это массив пикселей)
 	// image.NewRGBA выделяет память под все пиксели сразу
 	render := image.NewRGBA(image.Rect(0, 0, width, height))
 	fmt.Printf("bounds len: %d\n", len(bounds))
-	// 3. Ваш цикл рендеринга (имитация)
-	var patch BilinearPatch
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			fmt.Printf("progress %f\n", float32(y)/float32(height)*100.0)
 			sample := Sample{float32(x) + 0.5, float32(y) + 0.5, 0.0}
-			hesHit := false
+
+			var depth float32 = 1.0
 
 			for index, bound := range bounds {
-				if bound.Contains(sample) && mesh[index].insideQuad(sample) {
-					patch = mesh[index]
-					hesHit = true
-					break
+				if bound.Contains(sample) && allPaches[index].insideQuad(sample) { //&& allPaches[index].insideQuad(sample)
+					patch := allPaches[index]
+					uLocal, vLocal := patch.inverseAffineQuad(sample)
+					vpos := patch.EvaluatePos(uLocal, vLocal)
+					if depth < vpos.Z() {
+						continue
+					}
+					depth = vpos.Z()
+					resultUV := patch.EvaluateUV(uLocal, vLocal)
+					pixelColor := SampleBilinear(img, resultUV.X(), resultUV.Y())
+					render.Set(x, y, pixelColor)
+
 				}
 			}
-
-			if !hesHit {
-				continue
-			}
-
-			uLocal, vLocal := patch.inverseAffineQuad(sample)
-			resultUV := EvaluateBilinear(
-				mgl32.Vec3{patch.minU, patch.minV, 0},
-				mgl32.Vec3{patch.maxU, patch.minV, 0},
-				mgl32.Vec3{patch.minU, patch.maxV, 0},
-				mgl32.Vec3{patch.maxU, patch.maxV, 0},
-				uLocal, vLocal,
-			)
-			pixelColor := SampleBilinear(img, resultUV.X(), resultUV.Y()) // img.At(int(patch.U*float32(twidth)), int(patch.V*float32(theight)))
-			// Устанавливаем цвет пикселя
-			render.Set(x, y, pixelColor)
 		}
 	}
 
 	// 4. Сохраняем результат в файл
-	f, err := os.Create("render.png")
+	f, err := os.Create("render_image/render.png")
 	if err != nil {
 		panic(err)
 	}
