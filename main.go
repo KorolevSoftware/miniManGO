@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
 	"os"
 
 	"github.com/go-gl/mathgl/mgl32"
 )
+
+var rocketTexture image.Image
 
 func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	bounds := img.Bounds()
@@ -64,7 +65,18 @@ func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	}
 }
 
+func LinearizeDepthZO(depth, near, far float32) float32 {
+	// depth: ndc.z в [0,1] после PerspectiveZO
+	return (near * far) / (far - depth*(far-near))
+}
+
+func NormalizeLinearDepthZO(depth, near, far float32) float32 {
+	linearDepth := LinearizeDepthZO(depth, near, far)
+	return (linearDepth - near) / (far - near)
+}
+
 func main() {
+
 	file, err := os.Open("Roket.png")
 	if err != nil {
 		fmt.Printf("Ошибка при открытии файла: %v\n", err)
@@ -73,6 +85,7 @@ func main() {
 	defer file.Close()
 
 	img, format, err := image.Decode(file)
+	rocketTexture = img
 	if err != nil {
 		fmt.Printf("Ошибка при декодировании: %v\n", err)
 		return
@@ -86,69 +99,15 @@ func main() {
 	fmt.Printf("Размер: %d x %d\n", twidth, theight)
 
 	model, err := LoadObj("models/cube.obj")
-	allPaches := make([]BilinearPatch, 0, 100)
 
-	for _, patch := range model.patches {
-		allPaches = append(allPaches, patch.Split(6, 0.0, 1.0, 0.0, 1.0)...)
-	}
-
-	// 1. Параметры изображения
-	width, height := 800, 600
+	width, height := 800, 608
 
 	fovyRad := mgl32.DegToRad(60)
 	proj := PerspectiveZO(fovyRad, float32(width)/float32(height), 0.1, 20)
 
-	for i, patch := range allPaches {
-		allPaches[i].P00 = Project(patch.P00, mgl32.Ident4(), proj, 0, 0, width, height)
-		allPaches[i].P01 = Project(patch.P01, mgl32.Ident4(), proj, 0, 0, width, height)
-		allPaches[i].P10 = Project(patch.P10, mgl32.Ident4(), proj, 0, 0, width, height)
-		allPaches[i].P11 = Project(patch.P11, mgl32.Ident4(), proj, 0, 0, width, height)
-	}
+	render := NewRender(width, height, 32)
+	render.SetProject(proj)
+	render.Draw(model.patches)
 
-	bounds := make([]BoundBox, len(allPaches))
-
-	for index, patch := range allPaches {
-		bounds[index] = patch.toBoundBox()
-	}
-
-	// 2. Создаем "холст" (RGBA — это массив пикселей)
-	// image.NewRGBA выделяет память под все пиксели сразу
-	render := image.NewRGBA(image.Rect(0, 0, width, height))
-	fmt.Printf("bounds len: %d\n", len(bounds))
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			fmt.Printf("progress %f\n", float32(y)/float32(height)*100.0)
-			sample := Sample{float32(x) + 0.5, float32(y) + 0.5, 0.0}
-
-			var depth float32 = 1.0
-
-			for index, bound := range bounds {
-				if bound.Contains(sample) && allPaches[index].insideQuad(sample) { //&& allPaches[index].insideQuad(sample)
-					patch := allPaches[index]
-					uLocal, vLocal := patch.inverseAffineQuad(sample)
-					vpos := patch.EvaluatePos(uLocal, vLocal)
-					if depth < vpos.Z() {
-						continue
-					}
-					depth = vpos.Z()
-					resultUV := patch.EvaluateUV(uLocal, vLocal)
-					pixelColor := SampleBilinear(img, resultUV.X(), resultUV.Y())
-					render.Set(x, y, pixelColor)
-
-				}
-			}
-		}
-	}
-
-	// 4. Сохраняем результат в файл
-	f, err := os.Create("render_image/render.png")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	err = png.Encode(f, render)
-	if err != nil {
-		panic(err)
-	}
+	render.save("render_image/render.png")
 }

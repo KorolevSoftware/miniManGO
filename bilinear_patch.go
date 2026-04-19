@@ -6,6 +6,14 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
+type SplitAxis int
+
+const (
+	SplitAxisNone SplitAxis = iota
+	SplitAxisU
+	SplitAxisV
+)
+
 type BilinearPatch struct {
 	P00  mgl32.Vec3
 	P01  mgl32.Vec3
@@ -15,6 +23,90 @@ type BilinearPatch struct {
 	UV01 mgl32.Vec2
 	UV10 mgl32.Vec2
 	UV11 mgl32.Vec2
+}
+
+func (bp *BilinearPatch) ProjectBBox(matrix mgl32.Mat4) (bound BoundBox) {
+	p1 := Project(bp.P00, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+	p2 := Project(bp.P01, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+	p3 := Project(bp.P10, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+	p4 := Project(bp.P11, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+
+	// p1 := matrix.Mul4x1(bp.P00.Vec4(1)).Vec3()
+	// p2 := matrix.Mul4x1(bp.P01.Vec4(1)).Vec3()
+	// p3 := matrix.Mul4x1(bp.P10.Vec4(1)).Vec3()
+	// p4 := matrix.Mul4x1(bp.P11.Vec4(1)).Vec3()
+
+	// matrix.Mul4x1(du0.Vec4(1)).Vec3()
+
+	bound.Min = mgl32.Vec3{
+		min(p1.X(), p2.X(), p3.X(), p4.X()),
+		min(p1.Y(), p2.Y(), p3.Y(), p4.Y()),
+		min(p1.Z(), p2.Z(), p3.Z(), p4.Z()),
+	}
+	bound.Max = mgl32.Vec3{
+		max(p1.X(), p2.X(), p3.X(), p4.X()),
+		max(p1.Y(), p2.Y(), p3.Y(), p4.Y()),
+		max(p1.Z(), p2.Z(), p3.Z(), p4.Z()),
+	}
+	return
+}
+
+func (bp *BilinearPatch) Split(matrix mgl32.Mat4, splitPaches *[]BilinearPatch) {
+	isNeedSplit, axis := bp.CanBySplit(matrix)
+
+	if !isNeedSplit {
+		*splitPaches = append(*splitPaches, *bp)
+		return
+	}
+
+	var p1, p2 BilinearPatch
+
+	switch axis {
+	case SplitAxisV:
+		p1 = bp.SubPatch(0.0, 0.5, 0.0, 1.0)
+		p2 = bp.SubPatch(0.5, 1.0, 0.0, 1.0)
+	case SplitAxisU:
+		p1 = bp.SubPatch(0.0, 1.0, 0.0, 0.5)
+		p2 = bp.SubPatch(0.0, 1.0, 0.5, 1.0)
+	}
+
+	p1.Split(matrix, splitPaches)
+	p2.Split(matrix, splitPaches)
+}
+
+func (bp *BilinearPatch) CanBySplit(matrix mgl32.Mat4) (canBySplit bool, axis SplitAxis) {
+	du0 := bp.P00.Sub(bp.P01)
+	du1 := bp.P10.Sub(bp.P11)
+	dv0 := bp.P01.Sub(bp.P11)
+	dv1 := bp.P00.Sub(bp.P10)
+
+	du0 = matrix.Mul4x1(du0.Vec4(1)).Vec3()
+	du1 = matrix.Mul4x1(du1.Vec4(1)).Vec3()
+	dv0 = matrix.Mul4x1(dv0.Vec4(1)).Vec3()
+	dv1 = matrix.Mul4x1(dv1.Vec4(1)).Vec3()
+	lenU2 := du0.LenSqr() + du1.LenSqr()
+	lenV2 := dv0.LenSqr() + dv1.LenSqr()
+	maxLen := max(lenU2, lenV2)
+
+	if maxLen < 1.0 {
+		return false, SplitAxisNone
+	}
+
+	if lenU2 > lenV2 {
+		return true, SplitAxisU
+	}
+	return true, SplitAxisV
+}
+
+func (bp *BilinearPatch) SplitByAxis(axis SplitAxis) []BilinearPatch {
+	switch axis {
+	case SplitAxisU:
+		return []BilinearPatch{bp.SubPatch(0.0, 0.5, 0.0, 1.0), bp.SubPatch(0.5, 1.0, 0.0, 1.0)}
+	case SplitAxisV:
+		return []BilinearPatch{bp.SubPatch(0.0, 1.0, 0.0, 0.5), bp.SubPatch(0.0, 1.0, 0.5, 1.0)}
+	default:
+		return []BilinearPatch{*bp}
+	}
 }
 
 func edgeFunction2D(a, b mgl32.Vec3, x, y float32) float32 {
@@ -38,7 +130,20 @@ func (bp *BilinearPatch) EvaluateUV(u, v float32) mgl32.Vec2 {
 	return EvaluateBilinearVec2(bp.UV00, bp.UV10, bp.UV01, bp.UV11, u, v)
 }
 
-func (bp *BilinearPatch) Split(level int, uMin, uMax, vMin, vMax float32) []BilinearPatch {
+func (bp *BilinearPatch) SubPatch(uMin, uMax, vMin, vMax float32) BilinearPatch {
+	return BilinearPatch{
+		P00:  bp.EvaluatePos(uMin, vMin),
+		P01:  bp.EvaluatePos(uMin, vMax),
+		P10:  bp.EvaluatePos(uMax, vMin),
+		P11:  bp.EvaluatePos(uMax, vMax),
+		UV00: bp.EvaluateUV(uMin, vMin),
+		UV01: bp.EvaluateUV(uMin, vMax),
+		UV10: bp.EvaluateUV(uMax, vMin),
+		UV11: bp.EvaluateUV(uMax, vMax),
+	}
+}
+
+func (bp *BilinearPatch) SplitQuad(level int, uMin, uMax, vMin, vMax float32) []BilinearPatch {
 	if level <= 0 { // Мы возвращаем патч, который был вычислен на основе этих границ
 		return []BilinearPatch{{
 			P00:  bp.EvaluatePos(uMin, vMin),
@@ -70,6 +175,9 @@ func (bp *BilinearPatch) Split(level int, uMin, uMax, vMin, vMax float32) []Bili
 		// ВАЖНО: Мы создаем новый патч, вычисляя его углы через Evaluate
 		// используя параметры U и V.
 		// Это гарантирует, что геометрия будет идеально соответствовать текстуре!
+		// ВАЖНО: Мы создаем новый патч, вычисляя его углы через Evaluate
+		// используя параметры U и V.
+		// Это гарантирует, что геометрия будет идеально соответствовать текстуре!
 		// newPatch := BilinearPatch{
 		// 	P00: bp.Evaluate(u0, v0),
 		// 	P01: bp.Evaluate(u0, v1),
@@ -80,7 +188,7 @@ func (bp *BilinearPatch) Split(level int, uMin, uMax, vMin, vMax float32) []Bili
 		// }
 
 		// Рекурсия
-		subPatches = append(subPatches, bp.Split(level-1, u0, u1, v0, v1)...)
+		subPatches = append(subPatches, bp.SplitQuad(level-1, u0, u1, v0, v1)...)
 	}
 
 	return subPatches
