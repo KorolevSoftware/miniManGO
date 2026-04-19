@@ -27,71 +27,26 @@ type BilinearPatch struct {
 	Color color.Color
 }
 
-func (bp *BilinearPatch) ProjectBBox(matrix mgl32.Mat4) (bound BoundBox) {
-	p1 := Project(bp.P00, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-	p2 := Project(bp.P01, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-	p3 := Project(bp.P10, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-	p4 := Project(bp.P11, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-
-	// p1 := matrix.Mul4x1(bp.P00.Vec4(1)).Vec3()
-	// p2 := matrix.Mul4x1(bp.P01.Vec4(1)).Vec3()
-	// p3 := matrix.Mul4x1(bp.P10.Vec4(1)).Vec3()
-	// p4 := matrix.Mul4x1(bp.P11.Vec4(1)).Vec3()
-
-	// matrix.Mul4x1(du0.Vec4(1)).Vec3()
-
-	bound.Min = mgl32.Vec3{
-		min(p1.X(), p2.X(), p3.X(), p4.X()),
-		min(p1.Y(), p2.Y(), p3.Y(), p4.Y()),
-		min(p1.Z(), p2.Z(), p3.Z(), p4.Z()),
-	}
-	bound.Max = mgl32.Vec3{
-		max(p1.X(), p2.X(), p3.X(), p4.X()),
-		max(p1.Y(), p2.Y(), p3.Y(), p4.Y()),
-		max(p1.Z(), p2.Z(), p3.Z(), p4.Z()),
-	}
-	return
+func (bp *BilinearPatch) Project(projectFunc func(mgl32.Vec3) mgl32.Vec3) BilinearPatch {
+	projectPach := *bp
+	projectPach.P00 = projectFunc(projectPach.P00)
+	projectPach.P01 = projectFunc(projectPach.P01)
+	projectPach.P10 = projectFunc(projectPach.P10)
+	projectPach.P11 = projectFunc(projectPach.P11)
+	return projectPach
 }
 
-func (bp *BilinearPatch) Split(matrix mgl32.Mat4, splitPaches *[]BilinearPatch) {
-	isNeedSplit, axis := bp.CanBySplit(matrix)
+func (bp *BilinearPatch) CanBySplit(lenEdgeMax float32) (canBySplit bool, axis SplitAxis) {
+	du0 := bp.P00.Sub(bp.P01).Vec2()
+	du1 := bp.P10.Sub(bp.P11).Vec2()
+	dv0 := bp.P01.Sub(bp.P11).Vec2()
+	dv1 := bp.P00.Sub(bp.P10).Vec2()
 
-	if !isNeedSplit {
-		*splitPaches = append(*splitPaches, *bp)
-		return
-	}
-
-	var p1, p2 BilinearPatch
-
-	switch axis {
-	case SplitAxisV:
-		p1 = bp.SubPatch(0.0, 0.5, 0.0, 1.0)
-		p2 = bp.SubPatch(0.5, 1.0, 0.0, 1.0)
-	case SplitAxisU:
-		p1 = bp.SubPatch(0.0, 1.0, 0.0, 0.5)
-		p2 = bp.SubPatch(0.0, 1.0, 0.5, 1.0)
-	}
-
-	p1.Split(matrix, splitPaches)
-	p2.Split(matrix, splitPaches)
-}
-
-func (bp *BilinearPatch) CanBySplit(matrix mgl32.Mat4) (canBySplit bool, axis SplitAxis) {
-	p00 := Project(bp.P00, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-	p01 := Project(bp.P01, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-	p10 := Project(bp.P10, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-	p11 := Project(bp.P11, mgl32.Ident4(), matrix, 0, 0, 800, 608)
-
-	du0 := p00.Sub(p01)
-	du1 := p10.Sub(p11)
-	dv0 := p01.Sub(p11)
-	dv1 := p00.Sub(p10)
-
-	lenU2 := du0.LenSqr() + du1.LenSqr()
-	lenV2 := dv0.LenSqr() + dv1.LenSqr()
+	lenU2 := du0.Len() + du1.Len()
+	lenV2 := dv0.Len() + dv1.Len()
 	maxLen := max(lenU2, lenV2)
 
-	if maxLen < 1000^2 {
+	if maxLen < lenEdgeMax {
 		return false, SplitAxisNone
 	}
 
@@ -99,6 +54,17 @@ func (bp *BilinearPatch) CanBySplit(matrix mgl32.Mat4) (canBySplit bool, axis Sp
 		return true, SplitAxisU
 	}
 	return true, SplitAxisV
+}
+
+func (bp *BilinearPatch) SplitByAxis(axis SplitAxis) (BilinearPatch, BilinearPatch) {
+	switch axis {
+	case SplitAxisV:
+		return bp.SubPatch(0.0, 0.5, 0.0, 1.0), bp.SubPatch(0.5, 1.0, 0.0, 1.0)
+	case SplitAxisU:
+		return bp.SubPatch(0.0, 1.0, 0.0, 0.5), bp.SubPatch(0.0, 1.0, 0.5, 1.0)
+	default:
+		return *bp, *bp // TODO fix its potetional error
+	}
 }
 
 func edgeFunction2D(a, b mgl32.Vec3, x, y float32) float32 {
@@ -133,57 +99,6 @@ func (bp *BilinearPatch) SubPatch(uMin, uMax, vMin, vMax float32) BilinearPatch 
 		UV10: bp.EvaluateUV(uMax, vMin),
 		UV11: bp.EvaluateUV(uMax, vMax),
 	}
-}
-
-func (bp *BilinearPatch) SplitQuad(level int, uMin, uMax, vMin, vMax float32) []BilinearPatch {
-	if level <= 0 { // Мы возвращаем патч, который был вычислен на основе этих границ
-		return []BilinearPatch{{
-			P00:  bp.EvaluatePos(uMin, vMin),
-			P01:  bp.EvaluatePos(uMin, vMax),
-			P10:  bp.EvaluatePos(uMax, vMin),
-			P11:  bp.EvaluatePos(uMax, vMax),
-			UV00: bp.EvaluateUV(uMin, vMin),
-			UV01: bp.EvaluateUV(uMin, vMax),
-			UV10: bp.EvaluateUV(uMax, vMin),
-			UV11: bp.EvaluateUV(uMax, vMax),
-		}}
-	}
-
-	var subPatches []BilinearPatch
-	midU := (uMin + uMax) / 2.0
-	midV := (vMin + vMax) / 2.0
-
-	// Определяем 4 квадранта: {uStart, uEnd, vStart, vEnd}
-	quads := [4][4]float32{
-		{uMin, midU, vMin, midV}, // BL (P00)
-		{uMin, midU, midV, vMax}, // TL (P01)
-		{midU, uMax, vMin, midV}, // BR (P10)
-		{midU, uMax, midV, vMax}, // TR (P11)
-	}
-
-	for _, q := range quads {
-		u0, u1, v0, v1 := q[0], q[1], q[2], q[3]
-
-		// ВАЖНО: Мы создаем новый патч, вычисляя его углы через Evaluate
-		// используя параметры U и V.
-		// Это гарантирует, что геометрия будет идеально соответствовать текстуре!
-		// ВАЖНО: Мы создаем новый патч, вычисляя его углы через Evaluate
-		// используя параметры U и V.
-		// Это гарантирует, что геометрия будет идеально соответствовать текстуре!
-		// newPatch := BilinearPatch{
-		// 	P00: bp.Evaluate(u0, v0),
-		// 	P01: bp.Evaluate(u0, v1),
-		// 	P10: bp.Evaluate(u1, v0),
-		// 	P11: bp.Evaluate(u1, v1),
-		// 	U:   u0, // Сохраняем глобальный U для текстурирования
-		// 	V:   v0, // Сохраняем глобальный V для текстурирования
-		// }
-
-		// Рекурсия
-		subPatches = append(subPatches, bp.SplitQuad(level-1, u0, u1, v0, v1)...)
-	}
-
-	return subPatches
 }
 
 func (bq *BilinearPatch) inverseAffineQuad(sample Sample) (u, v float32) {

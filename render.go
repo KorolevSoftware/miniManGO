@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"math"
 	"math/rand"
 	"os"
 
@@ -19,6 +18,7 @@ type Render struct {
 	backetCountX int
 	backetCountY int
 	projecMatrix mgl32.Mat4
+	projectFunc  func(mgl32.Vec3) mgl32.Vec3
 }
 
 func (render *Render) SetProject(matrix mgl32.Mat4) {
@@ -35,7 +35,9 @@ func NewRender(width, height, backetSize int) (render *Render) {
 	render.backetCountX = backetCountX
 	render.backetCountY = backetCountY
 	render.backets = make([]Backet, backetCount)
-
+	render.projectFunc = func(v mgl32.Vec3) mgl32.Vec3 {
+		return Project(v, mgl32.Ident4(), render.projecMatrix, 0, 0, width, height)
+	}
 	for x := 0; x < backetCountX; x++ {
 		for y := 0; y < backetCountY; y++ {
 			backetIndex := x + y*backetCountX
@@ -48,60 +50,50 @@ func NewRender(width, height, backetSize int) (render *Render) {
 	return
 }
 
-func (render *Render) Draw(patches []BilinearPatch) {
-	fbBound := render.Framebuffer.Bounds()
-	windowBB := BoundBox{
-		Min: mgl32.Vec3{float32(fbBound.Min.X), float32(fbBound.Min.Y), 0},
-		Max: mgl32.Vec3{float32(fbBound.Max.X), float32(fbBound.Max.Y), 1.0},
-	}
-	fmt.Printf("All patches len: %d\n", len(patches))
-	for _, patch := range patches {
-		bbox := patch.ProjectBBox(render.projecMatrix)
-		if !windowBB.Intersects(bbox) {
+func (render *Render) SplitByBacket(backet *Backet, patches []BilinearPatch) {
+	backetBB := backet.toBoundBox()
+	for _, bigPatch := range patches {
+		bigPatchProjected := bigPatch.Project(render.projectFunc)
+		bigPatchBBox := bigPatchProjected.toBoundBox()
+		if !backetBB.Intersects(bigPatchBBox) {
 			continue
 		}
 
-		splitedPaches := make([]BilinearPatch, 0, 200)
+		patchStack := Stack[BilinearPatch]{}
+		patchStack.Push(bigPatch)
 
-		patch.Split(render.projecMatrix, &splitedPaches)
-		fmt.Printf("Patch splited len: %d\n", len(splitedPaches))
-		for _, splitedPatch := range splitedPaches {
-			bboxToBacket := splitedPatch.ProjectBBox(render.projecMatrix)
-			colorddd := color.RGBA{uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), 255}
-			splitedPatch.Color = colorddd
-			startBacketX := int(math.Floor(float64(bboxToBacket.Min.X() / float32(render.backetDim))))
-			startBacketY := int(math.Floor(float64(bboxToBacket.Min.Y() / float32(render.backetDim))))
-
-			startBacketX = max(startBacketX, 0)
-			startBacketY = max(startBacketY, 0)
-
-			endBacketX := int(math.Ceil(float64(bboxToBacket.Max.X() / float32(render.backetDim))))
-			endBacketY := int(math.Ceil(float64(bboxToBacket.Max.Y() / float32(render.backetDim))))
-
-			endBacketX = min(endBacketX, render.backetCountX)
-			endBacketY = min(endBacketY, render.backetCountY)
-
-			splitedPatch.P00 = Project(splitedPatch.P00, mgl32.Ident4(), render.projecMatrix, 0, 0, 800, 608)
-			splitedPatch.P01 = Project(splitedPatch.P01, mgl32.Ident4(), render.projecMatrix, 0, 0, 800, 608)
-			splitedPatch.P10 = Project(splitedPatch.P10, mgl32.Ident4(), render.projecMatrix, 0, 0, 800, 608)
-			splitedPatch.P11 = Project(splitedPatch.P11, mgl32.Ident4(), render.projecMatrix, 0, 0, 800, 608)
-
-			for backetX := startBacketX; backetX < endBacketX; backetX++ {
-				for backetY := startBacketY; backetY < endBacketY; backetY++ {
-
-					render.backets[backetX+backetY*render.backetCountX].appPrimitive(splitedPatch)
-				}
+		for patchStack.Size() > 0 {
+			patchToRaster, _ := patchStack.Pop()
+			patchToRasterProjected := patchToRaster.Project(render.projectFunc)
+			patchToRasterBBox := patchToRasterProjected.toBoundBox()
+			if !backetBB.Intersects(patchToRasterBBox) {
+				continue
 			}
-			// for i := range render.backets {
-			// 	render.backets[i].appPrimitive(splitedPatch)
-			// }
+			canBySplit, axis := patchToRasterProjected.CanBySplit(10)
+
+			if canBySplit {
+				newPatch1, newPatch2 := patchToRaster.SplitByAxis(axis)
+				patchStack.Push(newPatch1)
+				patchStack.Push(newPatch2)
+				continue
+			}
+
+			patchToRasterProjected.Color = color.RGBA{uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), 255}
+			backet.appPrimitive(patchToRasterProjected)
 		}
 	}
-	// render.backets[0].Draw()
+}
+
+func (render *Render) Draw(patches []BilinearPatch) {
+	fmt.Printf("All patches len: %d\n", len(patches))
+
+	for index := range render.backets {
+		render.SplitByBacket(&render.backets[index], patches)
+	}
+
 	for _, backet := range render.backets {
 		backet.Draw()
 	}
-
 }
 
 func (render *Render) save(filepath string) {

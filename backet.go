@@ -5,6 +5,8 @@ import (
 	"image"
 	"image/color"
 	_ "image/png" // для поддержки PNG
+
+	"github.com/go-gl/mathgl/mgl32"
 	// "math"
 	// "math/rand"
 )
@@ -20,6 +22,12 @@ type Backet struct {
 	StartX, StartY int
 	ColorImage     SubImage
 	Primitives     []BilinearPatch
+}
+
+func (backet *Backet) toBoundBox() (bound BoundBox) {
+	bound.Min = mgl32.Vec3{float32(backet.StartX), float32(backet.StartY), 0}
+	bound.Max = mgl32.Vec3{float32(backet.StartX + backet.SizeX), float32(backet.StartY + backet.SizeY), 1}
+	return
 }
 
 func (backet *Backet) init(startX, startY, sizeX, sizeY int, imageSrc image.Image) {
@@ -49,13 +57,6 @@ func (backet *Backet) Draw() {
 		fmt.Printf("Backet len: %d\n", len(backet.Primitives))
 	}
 
-	// colorddd := color.RGBA{uint8(rand.Int31n(255)), 255, 0, 255}
-	// for x := 0; x < backet.SizeX; x++ {
-	// 	for y := 0; y < backet.SizeY; y++ {
-	// 		backet.ColorImage.Set(x+backet.StartX, y+backet.StartY, colorddd)
-	// 	}
-	// }
-	// return
 	for _, patch := range backet.Primitives {
 		// bbox := patch.toBoundBox()
 		// startX := int(max(math.Floor(float64(bbox.Min.X())), float64(backet.StartX)))
@@ -82,10 +83,10 @@ func (backet *Backet) Draw() {
 					continue
 				}
 				backet.zBuffer[zX+yZ*backet.SizeX] = vpos.Z()
-				// resultUV := patch.EvaluateUV(uLocal, vLocal)
-				// pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
-				// backet.ColorImage.Set(x, y, color.RGBA{255, 0, 0, 255})
-				backet.ColorImage.Set(x, y, patch.Color)
+				resultUV := patch.EvaluateUV(uLocal, vLocal)
+				pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
+				backet.ColorImage.Set(x, y, pixelColor)
+				// backet.ColorImage.Set(x, y, patch.Color)
 			}
 		}
 	}

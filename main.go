@@ -100,7 +100,7 @@ func main() {
 
 	model, err := LoadObj("models/cube.obj")
 
-	width, height := 800, 608
+	width, height := 800, 600
 
 	fovyRad := mgl32.DegToRad(60)
 	proj := PerspectiveZO(fovyRad, float32(width)/float32(height), 0.1, 20)
