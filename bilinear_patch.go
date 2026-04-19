@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image/color"
 	"math"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -15,14 +16,15 @@ const (
 )
 
 type BilinearPatch struct {
-	P00  mgl32.Vec3
-	P01  mgl32.Vec3
-	P10  mgl32.Vec3
-	P11  mgl32.Vec3
-	UV00 mgl32.Vec2
-	UV01 mgl32.Vec2
-	UV10 mgl32.Vec2
-	UV11 mgl32.Vec2
+	P00   mgl32.Vec3
+	P01   mgl32.Vec3
+	P10   mgl32.Vec3
+	P11   mgl32.Vec3
+	UV00  mgl32.Vec2
+	UV01  mgl32.Vec2
+	UV10  mgl32.Vec2
+	UV11  mgl32.Vec2
+	Color color.Color
 }
 
 func (bp *BilinearPatch) ProjectBBox(matrix mgl32.Mat4) (bound BoundBox) {
@@ -75,20 +77,21 @@ func (bp *BilinearPatch) Split(matrix mgl32.Mat4, splitPaches *[]BilinearPatch) 
 }
 
 func (bp *BilinearPatch) CanBySplit(matrix mgl32.Mat4) (canBySplit bool, axis SplitAxis) {
-	du0 := bp.P00.Sub(bp.P01)
-	du1 := bp.P10.Sub(bp.P11)
-	dv0 := bp.P01.Sub(bp.P11)
-	dv1 := bp.P00.Sub(bp.P10)
+	p00 := Project(bp.P00, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+	p01 := Project(bp.P01, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+	p10 := Project(bp.P10, mgl32.Ident4(), matrix, 0, 0, 800, 608)
+	p11 := Project(bp.P11, mgl32.Ident4(), matrix, 0, 0, 800, 608)
 
-	du0 = matrix.Mul4x1(du0.Vec4(1)).Vec3()
-	du1 = matrix.Mul4x1(du1.Vec4(1)).Vec3()
-	dv0 = matrix.Mul4x1(dv0.Vec4(1)).Vec3()
-	dv1 = matrix.Mul4x1(dv1.Vec4(1)).Vec3()
+	du0 := p00.Sub(p01)
+	du1 := p10.Sub(p11)
+	dv0 := p01.Sub(p11)
+	dv1 := p00.Sub(p10)
+
 	lenU2 := du0.LenSqr() + du1.LenSqr()
 	lenV2 := dv0.LenSqr() + dv1.LenSqr()
 	maxLen := max(lenU2, lenV2)
 
-	if maxLen < 1.0 {
+	if maxLen < 1000^2 {
 		return false, SplitAxisNone
 	}
 
@@ -96,17 +99,6 @@ func (bp *BilinearPatch) CanBySplit(matrix mgl32.Mat4) (canBySplit bool, axis Sp
 		return true, SplitAxisU
 	}
 	return true, SplitAxisV
-}
-
-func (bp *BilinearPatch) SplitByAxis(axis SplitAxis) []BilinearPatch {
-	switch axis {
-	case SplitAxisU:
-		return []BilinearPatch{bp.SubPatch(0.0, 0.5, 0.0, 1.0), bp.SubPatch(0.5, 1.0, 0.0, 1.0)}
-	case SplitAxisV:
-		return []BilinearPatch{bp.SubPatch(0.0, 1.0, 0.0, 0.5), bp.SubPatch(0.0, 1.0, 0.5, 1.0)}
-	default:
-		return []BilinearPatch{*bp}
-	}
 }
 
 func edgeFunction2D(a, b mgl32.Vec3, x, y float32) float32 {

@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"math"
+	"math/rand"
 	"os"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -65,7 +67,8 @@ func (render *Render) Draw(patches []BilinearPatch) {
 		fmt.Printf("Patch splited len: %d\n", len(splitedPaches))
 		for _, splitedPatch := range splitedPaches {
 			bboxToBacket := splitedPatch.ProjectBBox(render.projecMatrix)
-
+			colorddd := color.RGBA{uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), 255}
+			splitedPatch.Color = colorddd
 			startBacketX := int(math.Floor(float64(bboxToBacket.Min.X() / float32(render.backetDim))))
 			startBacketY := int(math.Floor(float64(bboxToBacket.Min.Y() / float32(render.backetDim))))
 

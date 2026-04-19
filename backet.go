@@ -23,12 +23,12 @@ type Backet struct {
 }
 
 func (backet *Backet) init(startX, startY, sizeX, sizeY int, imageSrc image.Image) {
-	backet.zBuffer = make([]float32, 800*608)
+	backet.zBuffer = make([]float32, sizeX*sizeY)
 	backet.StartX = startX
 	backet.StartY = startY
 	backet.SizeX = sizeX
 	backet.SizeY = sizeY
-	cropRect := image.Rect(0, 0, 800, 608)
+	cropRect := image.Rect(startX, startY, startX+sizeX, startY+sizeY)
 	if subber, ok := imageSrc.(SubImage); ok {
 		// Внутри этого блока компилятор уже "знает",
 		// что у переменной subber точно есть метод SubImage.
@@ -66,8 +66,8 @@ func (backet *Backet) Draw() {
 		//
 		startX := backet.StartX
 		startY := backet.StartY
-		endX := backet.StartX+backet.SizeX
-		endY := backet.StartY+backet.SizeY
+		endX := backet.StartX + backet.SizeX
+		endY := backet.StartY + backet.SizeY
 
 		for x, zX := startX, 0; x < endX; x, zX = x+1, zX+1 {
 			for y, yZ := startY, 0; y < endY; y, yZ = y+1, yZ+1 {
@@ -78,15 +78,17 @@ func (backet *Backet) Draw() {
 
 				uLocal, vLocal := patch.inverseAffineQuad(sample)
 				vpos := patch.EvaluatePos(uLocal, vLocal)
-				if backet.zBuffer[x+y*800] < vpos.Z() {
+				if backet.zBuffer[zX+yZ*backet.SizeX] < vpos.Z() {
 					continue
 				}
-				backet.zBuffer[x+y*800] = vpos.Z()
-				resultUV := patch.EvaluateUV(uLocal, vLocal)
-				pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
+				backet.zBuffer[zX+yZ*backet.SizeX] = vpos.Z()
+				// resultUV := patch.EvaluateUV(uLocal, vLocal)
+				// pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
 				// backet.ColorImage.Set(x, y, color.RGBA{255, 0, 0, 255})
-				backet.ColorImage.Set(x, y, pixelColor)
+				backet.ColorImage.Set(x, y, patch.Color)
 			}
 		}
 	}
+
+	backet.Primitives = backet.Primitives[:]
 }
