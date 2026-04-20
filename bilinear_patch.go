@@ -88,6 +88,29 @@ func (bp *BilinearPatch) EvaluateUV(u, v float32) mgl32.Vec2 {
 	return EvaluateBilinearVec2(bp.UV00, bp.UV10, bp.UV01, bp.UV11, u, v)
 }
 
+func (bq *BilinearPatch) Dice(dicingRate float32, screenBoundBox BoundBox) (Grid, int, int) {
+	width := screenBoundBox.Max.X() - screenBoundBox.Min.X()
+	height := screenBoundBox.Max.Y() - screenBoundBox.Min.Y()
+	Nx := int(math.Ceil(float64(width / dicingRate)))
+	Ny := int(math.Ceil(float64(height / dicingRate)))
+
+	grid := Grid{}
+	grid.Positions = make([]mgl32.Vec3, 0, (Nx+1)*(Ny+1))
+
+	// Dice
+	for y := 0; y <= Ny; y++ {
+		for x := 0; x <= Nx; x++ {
+			u := float32(x) / float32(Nx)
+			v := float32(y) / float32(Ny)
+
+			grid.Positions = append(grid.Positions, bq.EvaluatePos(u, v))
+			grid.UV = append(grid.UV, bq.EvaluateUV(u, v))
+		}
+	}
+
+	return grid, Nx, Ny
+}
+
 func (bp *BilinearPatch) SubPatch(uMin, uMax, vMin, vMax float32) BilinearPatch {
 	return BilinearPatch{
 		P00:  bp.EvaluatePos(uMin, vMin),

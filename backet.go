@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	// "math"
-	// "math/rand"
+	"math/rand"
 )
 
 type SubImage interface {
@@ -52,7 +52,7 @@ func (backet *Backet) appPrimitive(patch BilinearPatch) {
 	backet.Primitives = append(backet.Primitives, patch)
 }
 
-func (backet *Backet) Draw() {
+func (backet *Backet) Draw(dicingRate float32, projectFunc func(mgl32.Vec3) mgl32.Vec3) {
 	if len(backet.Primitives) > 0 {
 		fmt.Printf("Backet len: %d\n", len(backet.Primitives))
 	}
@@ -70,23 +70,47 @@ func (backet *Backet) Draw() {
 		endX := backet.StartX + backet.SizeX
 		endY := backet.StartY + backet.SizeY
 
-		for x, zX := startX, 0; x < endX; x, zX = x+1, zX+1 {
-			for y, yZ := startY, 0; y < endY; y, yZ = y+1, yZ+1 {
-				sample := Sample{X: float32(x), Y: float32(y), Z: 0}
-				if !patch.insideQuad(sample) {
-					continue
-				}
+		patchScreen := patch.Project(projectFunc)
+		patchScreenBB := patchScreen.toBoundBox()
 
-				uLocal, vLocal := patch.inverseAffineQuad(sample)
-				vpos := patch.EvaluatePos(uLocal, vLocal)
-				if backet.zBuffer[zX+yZ*backet.SizeX] < vpos.Z() {
-					continue
+		grid, Nx, Ny := patch.Dice(1, patchScreenBB)
+
+		flexPatch := BilinearPatch{}
+		gridWidth := Nx + 1
+
+		for i := 0; i < Nx; i++ {
+			for j := 0; j < Ny; j++ {
+				flexPatch.P00 = grid.Positions[i+j*gridWidth]
+				flexPatch.P01 = grid.Positions[i+(j+1)*gridWidth]
+				flexPatch.P10 = grid.Positions[(i+1)+j*gridWidth]
+				flexPatch.P11 = grid.Positions[(i+1)+(j+1)*gridWidth]
+
+				flexPatch.UV00 = grid.UV[i+j*gridWidth]
+				flexPatch.UV01 = grid.UV[i+(j+1)*gridWidth]
+				flexPatch.UV10 = grid.UV[(i+1)+j*gridWidth]
+				flexPatch.UV11 = grid.UV[(i+1)+(j+1)*gridWidth]
+
+				flexPatch = flexPatch.Project(projectFunc)
+				flexPatch.Color = color.RGBA{uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), 255}
+				for x, zX := startX, 0; x < endX; x, zX = x+1, zX+1 {
+					for y, yZ := startY, 0; y < endY; y, yZ = y+1, yZ+1 {
+						sample := Sample{X: float32(x), Y: float32(y), Z: 0}
+						if !flexPatch.insideQuad(sample) {
+							continue
+						}
+
+						uLocal, vLocal := flexPatch.inverseAffineQuad(sample)
+						vpos := flexPatch.EvaluatePos(uLocal, vLocal)
+						if backet.zBuffer[zX+yZ*backet.SizeX] < vpos.Z() {
+							continue
+						}
+						backet.zBuffer[zX+yZ*backet.SizeX] = vpos.Z()
+						// resultUV := flexPatch.EvaluateUV(uLocal, vLocal)
+						// pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
+						// backet.ColorImage.Set(x, y, pixelColor)
+						backet.ColorImage.Set(x, y, flexPatch.Color)
+					}
 				}
-				backet.zBuffer[zX+yZ*backet.SizeX] = vpos.Z()
-				resultUV := patch.EvaluateUV(uLocal, vLocal)
-				pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
-				backet.ColorImage.Set(x, y, pixelColor)
-				// backet.ColorImage.Set(x, y, patch.Color)
 			}
 		}
 	}

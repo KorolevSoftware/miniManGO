@@ -79,12 +79,12 @@ func (render *Render) SplitByBacket(backet *Backet, patches []BilinearPatch) {
 			}
 
 			patchToRasterProjected.Color = color.RGBA{uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), 255}
-			backet.appPrimitive(patchToRasterProjected)
+			backet.appPrimitive(patchToRaster)
 		}
 	}
 }
 
-func (render *Render) Draw(patches []BilinearPatch) {
+func (render *Render) Draw(patches []BilinearPatch, dicingRate float32) {
 	fmt.Printf("All patches len: %d\n", len(patches))
 
 	for index := range render.backets {
@@ -92,7 +92,7 @@ func (render *Render) Draw(patches []BilinearPatch) {
 	}
 
 	for _, backet := range render.backets {
-		backet.Draw()
+		backet.Draw(dicingRate, render.projectFunc)
 	}
 }
 

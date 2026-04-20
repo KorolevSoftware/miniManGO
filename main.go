@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	_ "net/http/pprof"
 	"os"
+	"runtime/pprof"
 
 	"github.com/go-gl/mathgl/mgl32"
-)
+) // Это магический импорт, который регистрирует эндпоинты /debug/pprof/
 
 var rocketTexture image.Image
 
@@ -76,7 +78,8 @@ func NormalizeLinearDepthZO(depth, near, far float32) float32 {
 }
 
 func main() {
-
+	f, _ := os.Create("mem_profile.out")
+	defer f.Close()
 	file, err := os.Open("Roket.png")
 	if err != nil {
 		fmt.Printf("Ошибка при открытии файла: %v\n", err)
@@ -100,14 +103,15 @@ func main() {
 
 	model, err := LoadObj("models/cube.obj")
 
-	width, height := 800, 600
+	width, height := 1920, 1080
 
 	fovyRad := mgl32.DegToRad(60)
 	proj := PerspectiveZO(fovyRad, float32(width)/float32(height), 0.1, 20)
 
 	render := NewRender(width, height, 32)
 	render.SetProject(proj)
-	render.Draw(model.patches)
+	render.Draw(model.patches, 1)
 
 	render.save("render_image/render.png")
+	pprof.WriteHeapProfile(f)
 }
