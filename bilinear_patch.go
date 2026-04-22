@@ -36,7 +36,7 @@ func (bp *BilinearPatch) Project(projectFunc func(mgl32.Vec3) mgl32.Vec3) Biline
 	return projectPach
 }
 
-func (bp *BilinearPatch) CanBySplit(lenEdgeMax float32) (canBySplit bool, axis SplitAxis) {
+func (bp *BilinearPatch) ShouldSplit(lenEdgeMax float32) (canBySplit bool, axis SplitAxis) {
 	du0 := bp.P00.Sub(bp.P01).Vec2()
 	du1 := bp.P10.Sub(bp.P11).Vec2()
 	dv0 := bp.P01.Sub(bp.P11).Vec2()
@@ -72,7 +72,7 @@ func edgeFunction2D(a, b mgl32.Vec3, x, y float32) float32 {
 		(y-a.Y())*(b.X()-a.X())
 }
 
-func (bp *BilinearPatch) insideQuad(sample Sample) bool {
+func (bp *BilinearPatch) InsideQuad(sample Sample) bool {
 	return edgeFunction2D(bp.P00, bp.P01, sample.X, sample.Y) >= 0 &&
 		edgeFunction2D(bp.P01, bp.P11, sample.X, sample.Y) >= 0 &&
 		edgeFunction2D(bp.P11, bp.P10, sample.X, sample.Y) >= 0 &&
@@ -91,24 +91,25 @@ func (bp *BilinearPatch) EvaluateUV(u, v float32) mgl32.Vec2 {
 func (bq *BilinearPatch) Dice(dicingRate float32, screenBoundBox BoundBox) (Grid, int, int) {
 	width := screenBoundBox.Max.X() - screenBoundBox.Min.X()
 	height := screenBoundBox.Max.Y() - screenBoundBox.Min.Y()
-	Nx := int(math.Ceil(float64(width / dicingRate)))
-	Ny := int(math.Ceil(float64(height / dicingRate)))
+	sizeX := int(math.Ceil(float64(width / dicingRate)))
+	sizeY := int(math.Ceil(float64(height / dicingRate)))
 
 	grid := Grid{}
-	grid.Positions = make([]mgl32.Vec3, 0, (Nx+1)*(Ny+1))
+	grid.Positions = make([]mgl32.Vec3, 0, (sizeX+1)*(sizeY+1))
+	grid.UV = make([]mgl32.Vec2, 0, (sizeX+1)*(sizeY+1))
 
 	// Dice
-	for y := 0; y <= Ny; y++ {
-		for x := 0; x <= Nx; x++ {
-			u := float32(x) / float32(Nx)
-			v := float32(y) / float32(Ny)
+	for y := 0; y <= sizeY; y++ {
+		for x := 0; x <= sizeX; x++ {
+			u := float32(x) / float32(sizeX)
+			v := float32(y) / float32(sizeY)
 
 			grid.Positions = append(grid.Positions, bq.EvaluatePos(u, v))
 			grid.UV = append(grid.UV, bq.EvaluateUV(u, v))
 		}
 	}
 
-	return grid, Nx, Ny
+	return grid, sizeX, sizeY
 }
 
 func (bp *BilinearPatch) SubPatch(uMin, uMax, vMin, vMax float32) BilinearPatch {
@@ -124,7 +125,7 @@ func (bp *BilinearPatch) SubPatch(uMin, uMax, vMin, vMax float32) BilinearPatch 
 	}
 }
 
-func (bq *BilinearPatch) inverseAffineQuad(sample Sample) (u, v float32) {
+func (bq *BilinearPatch) InverseAffineQuad(sample Sample) (u, v float32) {
 	B := bq.P10.Sub(bq.P00)
 	C := bq.P01.Sub(bq.P00)
 	rhs := mgl32.Vec3{sample.X, sample.Y, 0.0}.Sub(bq.P00)
@@ -139,8 +140,7 @@ func (bq *BilinearPatch) inverseAffineQuad(sample Sample) (u, v float32) {
 	return u, v
 }
 
-func (bp *BilinearPatch) toBoundBox() BoundBox {
-	boundBox := BoundBox{}
+func (bp *BilinearPatch) ToBoundBox() (boundBox BoundBox) {
 	boundBox.Min = mgl32.Vec3{
 		min(bp.P00.X(), bp.P01.X(), bp.P10.X(), bp.P11.X()),
 		min(bp.P00.Y(), bp.P01.Y(), bp.P10.Y(), bp.P11.Y()),
