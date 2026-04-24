@@ -9,10 +9,6 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-type Vertex struct {
-	X, Y, Z float64
-}
-
 func LoadObj(path string) (*Model, error) {
 	file, err := os.Open(path)
 
@@ -25,7 +21,7 @@ func LoadObj(path string) (*Model, error) {
 	scanner := bufio.NewScanner(file)
 
 	model := Model{}
-	model.patches = make([]BilinearPatch, 0, 100)
+	model.Patches = make([]BilinearPatch, 0, 100)
 
 	var vertexPositions []mgl32.Vec3
 	var uvPositions []mgl32.Vec2
@@ -79,16 +75,16 @@ func LoadObj(path string) (*Model, error) {
 			}
 
 			patch := BilinearPatch{
-				P00:  vertexPositions[vIndexArr[0]],
-				P01:  vertexPositions[vIndexArr[1]],
-				P10:  vertexPositions[vIndexArr[3]],
-				P11:  vertexPositions[vIndexArr[2]],
-				UV00: uvPositions[uvIndexArr[0]],
-				UV01: uvPositions[uvIndexArr[1]],
-				UV10: uvPositions[uvIndexArr[3]],
-				UV11: uvPositions[uvIndexArr[2]],
+				CornerP00: vertexPositions[vIndexArr[0]],
+				CornerP01: vertexPositions[vIndexArr[1]],
+				CornerP10: vertexPositions[vIndexArr[3]],
+				CornerP11: vertexPositions[vIndexArr[2]],
+				UV00:      uvPositions[uvIndexArr[0]],
+				UV01:      uvPositions[uvIndexArr[1]],
+				UV10:      uvPositions[uvIndexArr[3]],
+				UV11:      uvPositions[uvIndexArr[2]],
 			}
-			model.patches = append(model.patches, patch)
+			model.Patches = append(model.Patches, patch)
 		}
 	}
 

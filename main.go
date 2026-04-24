@@ -13,6 +13,14 @@ import (
 
 var rocketTexture image.Image
 
+func SampleNear(img image.Image, u, v float32) color.Color {
+	bounds := img.Bounds()
+	w, h := float32(bounds.Dx()), float32(bounds.Dy())
+	px := int(u * w)
+	py := int(v * h)
+	return img.At(px, py)
+}
+
 func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	bounds := img.Bounds()
 	w, h := float32(bounds.Dx()), float32(bounds.Dy())
@@ -96,21 +104,21 @@ func main() {
 	fmt.Printf("Формат изображения: %s\n", format)
 
 	_bounds := img.Bounds()
-	twidth := _bounds.Dx()
-	theight := _bounds.Dy()
+	texWidth := _bounds.Dx()
+	texHeight := _bounds.Dy()
 
-	fmt.Printf("Размер: %d x %d\n", twidth, theight)
+	fmt.Printf("Размер: %d x %d\n", texWidth, texHeight)
 
 	model, err := LoadObj("models/cube.obj")
 
 	width, height := 1920, 1080
 
 	fovyRad := mgl32.DegToRad(60)
-	proj := PerspectiveZO(fovyRad, float32(width)/float32(height), 0.1, 20)
+	proj := PerspectiveZO(fovyRad, float32(width)/float32(height), 0.1, 30)
 
 	render := NewRender(width, height, 32)
-	render.SetProject(proj)
-	render.Draw(model.patches, 1)
+	render.SetProjectionMatrix(proj)
+	render.Draw(model.Patches, 1)
 
 	render.save("render_image/render.png")
 	pprof.WriteHeapProfile(f)

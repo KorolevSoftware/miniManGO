@@ -62,7 +62,7 @@ func PerspectiveZO(fovy, aspect, near, far float32) mgl32.Mat4 {
 }
 
 func Project(obj mgl32.Vec3, modelview, projection mgl32.Mat4, initialX, initialY, width, height int) (win mgl32.Vec3) {
-	obj4 := obj.Vec4(1.0)
+	obj4 := mgl32.Vec4{obj.X(), obj.Y(), obj.Z(), 1}
 
 	clip := projection.Mul4(modelview).Mul4x1(obj4)
 	if clip.W() == 0 {

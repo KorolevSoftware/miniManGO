@@ -3,25 +3,22 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
-	"math/rand"
 	"os"
+	"sync"
 
 	"github.com/go-gl/mathgl/mgl32"
 )
 
 type Render struct {
-	Framebuffer  image.Image
-	buckets      []*Bucket
-	bucketDim    int
-	bucketCountX int
-	bucketCountY int
-	projecMatrix mgl32.Mat4
-	projectFunc  func(mgl32.Vec3) mgl32.Vec3
+	Framebuffer     image.Image
+	buckets         []*Bucket
+	bucketDim       int
+	projecMatrix    mgl32.Mat4
+	projectToScreen func(mgl32.Vec3) mgl32.Vec3
 }
 
-func (render *Render) SetProject(matrix mgl32.Mat4) {
+func (render *Render) SetProjectionMatrix(matrix mgl32.Mat4) {
 	render.projecMatrix = matrix
 }
 
@@ -32,10 +29,8 @@ func NewRender(width, height, bucketSize int) (render *Render) {
 	bucketCountY := height / bucketSize
 	render.bucketDim = bucketSize
 	bucketCount := bucketCountX * bucketCountY
-	render.bucketCountX = bucketCountX
-	render.bucketCountY = bucketCountY
 	render.buckets = make([]*Bucket, bucketCount)
-	render.projectFunc = func(v mgl32.Vec3) mgl32.Vec3 {
+	render.projectToScreen = func(v mgl32.Vec3) mgl32.Vec3 {
 		return Project(v, mgl32.Ident4(), render.projecMatrix, 0, 0, width, height)
 	}
 	for x := range bucketCountX {
@@ -54,7 +49,7 @@ func NewRender(width, height, bucketSize int) (render *Render) {
 func (render *Render) SplitBybucket(bucket *Bucket, patches []BilinearPatch) {
 	bucketBB := bucket.toBoundBox()
 	for _, bigPatch := range patches {
-		bigPatchProjected := bigPatch.Project(render.projectFunc)
+		bigPatchProjected := bigPatch.Project(render.projectToScreen)
 		bigPatchBBox := bigPatchProjected.ToBoundBox()
 		if !bucketBB.Intersects(bigPatchBBox) {
 			continue
@@ -65,22 +60,21 @@ func (render *Render) SplitBybucket(bucket *Bucket, patches []BilinearPatch) {
 
 		for patchStack.Size() > 0 {
 			patchToRaster, _ := patchStack.Pop()
-			patchToRasterProjected := patchToRaster.Project(render.projectFunc)
+			patchToRasterProjected := patchToRaster.Project(render.projectToScreen)
 			patchToRasterBBox := patchToRasterProjected.ToBoundBox()
 			if !bucketBB.Intersects(patchToRasterBBox) {
 				continue
 			}
-			canBySplit, axis := patchToRasterProjected.ShouldSplit(10)
+			canBeSplit, axis := patchToRasterProjected.ShouldSplit(10)
 
-			if canBySplit {
+			if canBeSplit {
 				newPatch1, newPatch2 := patchToRaster.SplitByAxis(axis)
 				patchStack.Push(newPatch1)
 				patchStack.Push(newPatch2)
 				continue
 			}
 
-			patchToRasterProjected.Color = color.RGBA{uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), uint8(rand.Int31n(255)), 255}
-			bucket.appPrimitive(patchToRaster)
+			bucket.AddPrimitive(patchToRaster)
 		}
 	}
 }
@@ -88,10 +82,16 @@ func (render *Render) SplitBybucket(bucket *Bucket, patches []BilinearPatch) {
 func (render *Render) Draw(patches []BilinearPatch, dicingRate float32) {
 	fmt.Printf("All patches len: %d\n", len(patches))
 
+	var wg sync.WaitGroup
 	for _, bucket := range render.buckets {
-		render.SplitBybucket(bucket, patches)
-		bucket.Draw(dicingRate, render.projectFunc)
+		wg.Add(1)
+		go func(b *Bucket) {
+			defer wg.Done()
+			render.SplitBybucket(b, patches)
+			b.Draw(dicingRate, render.projectToScreen)
+		}(bucket)
 	}
+	wg.Wait()
 }
 
 func (render *Render) save(filepath string) {
