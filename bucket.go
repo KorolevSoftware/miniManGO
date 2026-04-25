@@ -28,22 +28,22 @@ func (bucket *Bucket) toBoundBox() (bound BoundBox) {
 	return
 }
 
-func (bucket *Bucket) init(startX, startY, sizeX, sizeY int, imageSrc image.Image) {
+func NewBacket(startX, startY, sizeX, sizeY int, imageSrc image.Image) *Bucket {
+	bucket := &Bucket{}
 	bucket.zBuffer = make([]float32, sizeX*sizeY)
 	bucket.StartX = startX
 	bucket.StartY = startY
 	bucket.SizeX = sizeX
 	bucket.SizeY = sizeY
 	cropRect := image.Rect(startX, startY, startX+sizeX, startY+sizeY)
-	if subber, ok := imageSrc.(SubImage); ok {
-		// Внутри этого блока компилятор уже "знает",
-		// что у переменной subber точно есть метод SubImage.
-		bucket.ColorImage = subber.SubImage(cropRect).(SubImage)
+	if subImage, ok := imageSrc.(SubImage); ok {
+		bucket.ColorImage = subImage.SubImage(cropRect).(SubImage)
 	}
 
 	for index := range bucket.zBuffer {
 		bucket.zBuffer[index] = 1.0
 	}
+	return bucket
 }
 
 func (bucket *Bucket) AddPrimitive(patch BilinearPatch) {

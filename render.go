@@ -11,19 +11,19 @@ import (
 )
 
 type Render struct {
-	Framebuffer     image.Image
-	buckets         []*Bucket
-	bucketDim       int
-	projecMatrix    mgl32.Mat4
-	projectToScreen func(mgl32.Vec3) mgl32.Vec3
+	Framebuffer      image.Image
+	buckets          []*Bucket
+	bucketDim        int
+	projectionMatrix mgl32.Mat4
+	projectToScreen  func(mgl32.Vec3) mgl32.Vec3
 }
 
 func (render *Render) SetProjectionMatrix(matrix mgl32.Mat4) {
-	render.projecMatrix = matrix
+	render.projectionMatrix = matrix
 }
 
-func NewRender(width, height, bucketSize int) (render *Render) {
-	render = &Render{}
+func NewRender(width, height, bucketSize int) *Render {
+	render := &Render{}
 	render.Framebuffer = image.NewRGBA(image.Rect(0, 0, width, height))
 	bucketCountX := width / bucketSize
 	bucketCountY := height / bucketSize
@@ -31,19 +31,19 @@ func NewRender(width, height, bucketSize int) (render *Render) {
 	bucketCount := bucketCountX * bucketCountY
 	render.buckets = make([]*Bucket, bucketCount)
 	render.projectToScreen = func(v mgl32.Vec3) mgl32.Vec3 {
-		return Project(v, mgl32.Ident4(), render.projecMatrix, 0, 0, width, height)
+		return Project(v, mgl32.Ident4(), render.projectionMatrix, 0, 0, width, height)
 	}
+	render.projectionMatrix = mgl32.Ident4()
+
 	for x := range bucketCountX {
 		for y := range bucketCountY {
 			bucketIndex := x + y*bucketCountX
 			startX := x * bucketSize
 			startY := y * bucketSize
-			render.buckets[bucketIndex] = &Bucket{}
-			render.buckets[bucketIndex].init(startX, startY, bucketSize, bucketSize, render.Framebuffer)
+			render.buckets[bucketIndex] = NewBacket(startX, startY, bucketSize, bucketSize, render.Framebuffer)
 		}
 	}
-	render.projecMatrix = mgl32.Ident4()
-	return
+	return render
 }
 
 func (render *Render) SplitBybucket(bucket *Bucket, patches []BilinearPatch) {

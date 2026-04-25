@@ -38,21 +38,21 @@ func (patch BilinearPatch) Project(projectToScreen func(mgl32.Vec3) mgl32.Vec3) 
 	return patch
 }
 
-func (patch *BilinearPatch) ShouldSplit(lenEdgeMax float32) (canBeSplit bool, axis SplitAxis) {
-	du0 := patch.CornerP00.Sub(patch.CornerP01).Vec2()
-	du1 := patch.CornerP10.Sub(patch.CornerP11).Vec2()
-	dv0 := patch.CornerP01.Sub(patch.CornerP11).Vec2()
-	dv1 := patch.CornerP00.Sub(patch.CornerP10).Vec2()
+func (patch *BilinearPatch) ShouldSplit(lenEdgeMax float32) (shouldSplit bool, axis SplitAxis) {
+	edgeLenU0 := patch.CornerP00.Sub(patch.CornerP01).Vec2()
+	edgeLenU1 := patch.CornerP10.Sub(patch.CornerP11).Vec2()
+	edgeLenV0 := patch.CornerP01.Sub(patch.CornerP11).Vec2()
+	edgeLenV1 := patch.CornerP00.Sub(patch.CornerP10).Vec2()
 
-	lenU2 := du0.Len() + du1.Len()
-	lenV2 := dv0.Len() + dv1.Len()
-	maxLen := max(lenU2, lenV2)
+	totalLenU := edgeLenU0.Len() + edgeLenU1.Len()
+	totalLenV := edgeLenV0.Len() + edgeLenV1.Len()
+	maxLen := max(totalLenU, totalLenV)
 
 	if maxLen < lenEdgeMax {
 		return false, SplitAxisNone
 	}
 
-	if lenU2 > lenV2 {
+	if totalLenU > totalLenV {
 		return true, SplitAxisU
 	}
 	return true, SplitAxisV

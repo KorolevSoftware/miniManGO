@@ -88,7 +88,7 @@ func NormalizeLinearDepthZO(depth, near, far float32) float32 {
 func main() {
 	f, _ := os.Create("mem_profile.out")
 	defer f.Close()
-	file, err := os.Open("Roket.png")
+	file, err := os.Open("Rocket.png")
 	if err != nil {
 		fmt.Printf("Ошибка при открытии файла: %v\n", err)
 		return
@@ -103,9 +103,9 @@ func main() {
 	}
 	fmt.Printf("Формат изображения: %s\n", format)
 
-	_bounds := img.Bounds()
-	texWidth := _bounds.Dx()
-	texHeight := _bounds.Dy()
+	bounds := img.Bounds()
+	texWidth := bounds.Dx()
+	texHeight := bounds.Dy()
 
 	fmt.Printf("Размер: %d x %d\n", texWidth, texHeight)
 
