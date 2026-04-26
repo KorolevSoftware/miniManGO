@@ -55,22 +55,16 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 	var micropolygon BilinearPatch
 
 	for _, patch := range bucket.Primitives {
-		// bbox := patch.toBoundBox()
-		// startX := int(max(math.Floor(float64(bbox.Min.X())), float64(bucket.StartX)))
-		// startY := int(max(math.Floor(float64(bbox.Min.Y())), float64(bucket.StartX)))
-		// endX := int(min(math.Ceil(float64(bbox.Max.X())), float64(bucket.StartX+bucket.SizeX)))
-		// endY := int(min(math.Ceil(float64(bbox.Max.Y())), float64(bucket.StartY+bucket.SizeY)))
-		//
-		//
-		startX := bucket.StartX
-		startY := bucket.StartY
-		endX := bucket.StartX + bucket.SizeX
-		endY := bucket.StartY + bucket.SizeY
+
+		backetStartX := bucket.StartX
+		backetStartY := bucket.StartY
+		backetEndX := bucket.StartX + bucket.SizeX
+		backetEndY := bucket.StartY + bucket.SizeY
 
 		patchScreen := patch.Project(projectToScreen)
 		patchScreenBB := patchScreen.ToBoundBox()
 
-		grid, Nx, Ny := patch.Dice(1, patchScreenBB)
+		grid, Nx, Ny := patch.Dice(dicingRate, patchScreenBB)
 
 		gridWidth := Nx + 1
 
@@ -93,8 +87,17 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 				micropolygon.Color10 = SampleNear(rocketTexture, micropolygon.UV10.X(), micropolygon.UV10.Y())
 				micropolygon.Color11 = SampleNear(rocketTexture, micropolygon.UV11.X(), micropolygon.UV11.Y())
 
-				for x, zX := startX, 0; x < endX; x, zX = x+1, zX+1 {
-					for y, yZ := startY, 0; y < endY; y, yZ = y+1, yZ+1 {
+				bbMicropolygon := micropolygon.ToBoundBox()
+				bStartX, bStartY, bEndX, bEndY := bbMicropolygon.Int()
+
+				startX := max(backetStartX, bStartX)
+				startY := max(backetStartY, bStartY)
+
+				endX := min(backetEndX, bEndX)
+				endY := min(backetEndY, bEndY)
+
+				for x := startX; x < endX; x++ {
+					for y := startY; y < endY; y++ {
 						sample := Sample{X: float32(x), Y: float32(y), Z: 0}
 						if !micropolygon.InsideQuad(sample) {
 							continue
@@ -102,10 +105,14 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 
 						uLocal, vLocal := micropolygon.UnprojectToUV(sample)
 						vpos := micropolygon.EvaluatePos(uLocal, vLocal)
-						if bucket.zBuffer[zX+yZ*bucket.SizeX] < vpos.Z() {
+						zposX := x - backetStartX
+						zposY := y - backetStartY
+
+						if bucket.zBuffer[zposX+zposY*bucket.SizeX] < vpos.Z() {
 							continue
 						}
-						bucket.zBuffer[zX+yZ*bucket.SizeX] = vpos.Z()
+
+						bucket.zBuffer[zposX+zposY*bucket.SizeX] = vpos.Z()
 						resultUV := micropolygon.EvaluateUV(uLocal, vLocal)
 						pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
 						bucket.ColorImage.Set(x, y, pixelColor)

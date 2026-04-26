@@ -118,7 +118,7 @@ func main() {
 
 	render := NewRender(width, height, 32)
 	render.SetProjectionMatrix(proj)
-	render.Draw(model.Patches, 1)
+	render.Draw(model.Patches, 5)
 
 	render.save("render_image/render.png")
 	pprof.WriteHeapProfile(f)
