@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // registers /debug/pprof endpoints
 	"os"
 	"runtime/pprof"
 	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
-) // Это магический импорт, который регистрирует эндпоинты /debug/pprof/
+)
 
 var rocketTexture image.Image
 
@@ -50,7 +50,6 @@ func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 
 	fx, fy := x-float32(x0), y-float32(y0)
 
-	// Функция для получения float32 цвета [0, 1]
 	getF := func(px, py int) (r, g, b, a float32) {
 		cr, cg, cb, ca := img.At(px, py).RGBA()
 		return float32(cr) / 65535.0, float32(cg) / 65535.0, float32(cb) / 65535.0, float32(ca) / 65535.0
@@ -61,7 +60,6 @@ func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	r01, g01, b01, a01 := getF(x0, y1)
 	r11, g11, b11, a11 := getF(x1, y1)
 
-	// Интерполяция X (верх и низ)
 	rt := r00*(1-fx) + r10*fx
 	gt := g00*(1-fx) + g10*fx
 	bt := b00*(1-fx) + b10*fx
@@ -72,9 +70,8 @@ func SampleBilinear(img image.Image, u, v float32) color.RGBA {
 	bb := b01*(1-fx) + b11*fx
 	ab := a01*(1-fx) + a11*fx
 
-	// Интерполяция Y и возврат в uint8 (умножаем на 255!)
 	return color.RGBA{
-		R: uint8((rt*(1-fy) + rb*fy) * 255), // Ой, скобки! Исправил ниже
+		R: uint8((rt*(1-fy) + rb*fy) * 255),
 		G: uint8((gt*(1-fy) + gb*fy) * 255),
 		B: uint8((bt*(1-fy) + bb*fy) * 255),
 		A: uint8((at*(1-fy) + ab*fy) * 255),

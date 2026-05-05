@@ -11,7 +11,7 @@ import (
 )
 
 type Render struct {
-	Framebuffer      image.Image
+	Framebuffer      *image.RGBA
 	buckets          []*Bucket
 	bucketDim        int
 	projectionMatrix mgl32.Mat4
@@ -40,13 +40,13 @@ func NewRender(width, height, bucketSize int) *Render {
 			bucketIndex := x + y*bucketCountX
 			startX := x * bucketSize
 			startY := y * bucketSize
-			render.buckets[bucketIndex] = NewBacket(startX, startY, bucketSize, bucketSize, render.Framebuffer)
+			render.buckets[bucketIndex] = NewBucket(startX, startY, bucketSize, bucketSize, render.Framebuffer)
 		}
 	}
 	return render
 }
 
-func (render *Render) SplitBybucket(bucket *Bucket, patches []BilinearPatch) {
+func (render *Render) SplitByBucket(bucket *Bucket, patches []BilinearPatch) {
 	bucketBB := bucket.toBoundBox()
 	for _, bigPatch := range patches {
 		bigPatchProjected := bigPatch.Project(render.projectToScreen)
@@ -87,7 +87,7 @@ func (render *Render) Draw(patches []BilinearPatch, dicingRate float32) {
 		wg.Add(1)
 		go func(b *Bucket) {
 			defer wg.Done()
-			render.SplitBybucket(b, patches)
+			render.SplitByBucket(b, patches)
 			b.Draw(dicingRate, render.projectToScreen)
 		}(bucket)
 	}
@@ -95,7 +95,6 @@ func (render *Render) Draw(patches []BilinearPatch, dicingRate float32) {
 }
 
 func (render *Render) save(filepath string) {
-	// 4. Сохраняем результат в файл
 	f, err := os.Create(filepath)
 	if err != nil {
 		panic(err)

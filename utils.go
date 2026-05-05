@@ -6,12 +6,8 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-// EvaluateBilinear — это универсальная функция, которая работает с любым типом T,
-// если мы предоставим ей способы умножения и сложения для этого типа.
+// P(u,v) = (1-u)(1-v)P00 + u(1-v)P10 + (1-u)vP01 + uvP11
 func EvaluateBilinear[T any](p00, p10, p01, p11 T, u, v float32, mul func(T, float32) T, add func(T, T) T) T {
-	// P(u,v) = (1-u)(1-v)P00 + u(1-v)P10 + (1-u)vP01 + uvP11
-
-	// Для оптимизации вычисляем веса один раз
 	w00 := (1.0 - u) * (1.0 - v)
 	w10 := u * (1.0 - v)
 	w01 := (1.0 - u) * v
@@ -25,7 +21,6 @@ func EvaluateBilinear[T any](p00, p10, p01, p11 T, u, v float32, mul func(T, flo
 	return add(add(term00, term10), add(term01, term11))
 }
 
-// Специализированная версия для mgl32.Vec3 (чтобы не писать callback-и каждый раз)
 func EvaluateBilinearVec3(p00, p10, p01, p11 mgl32.Vec3, u, v float32) mgl32.Vec3 {
 	return EvaluateBilinear(p00, p10, p01, p11, u, v,
 		func(v mgl32.Vec3, s float32) mgl32.Vec3 { return v.Mul(s) },
@@ -33,7 +28,6 @@ func EvaluateBilinearVec3(p00, p10, p01, p11 mgl32.Vec3, u, v float32) mgl32.Vec
 	)
 }
 
-// Специализированная версия для mgl32.Vec2 (чтобы не писать callback-и каждый раз)
 func EvaluateBilinearVec2(p00, p10, p01, p11 mgl32.Vec2, u, v float32) mgl32.Vec2 {
 	return EvaluateBilinear(p00, p10, p01, p11, u, v,
 		func(v mgl32.Vec2, s float32) mgl32.Vec2 { return v.Mul(s) },
@@ -41,7 +35,6 @@ func EvaluateBilinearVec2(p00, p10, p01, p11 mgl32.Vec2, u, v float32) mgl32.Vec
 	)
 }
 
-// Специализированная версия для float32 (для каналов цвета)
 func EvaluateBilinearFloat(p00, p10, p01, p11 float32, u, v float32) float32 {
 	return EvaluateBilinear(p00, p10, p01, p11, u, v,
 		func(f float32, s float32) float32 { return f * s },

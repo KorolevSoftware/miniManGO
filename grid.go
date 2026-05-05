@@ -25,8 +25,10 @@ func NewGrid(width, height int) *Grid {
 }
 
 func (grid *Grid) SetSize(width, height int) {
-	if grid.height >= height && grid.width >= width {
+	if width*height <= len(grid.Positions) {
+		grid.width = width
+		grid.height = height
 		return
-	}  
+	}
 	grid.updateGridData(width, height)
 }

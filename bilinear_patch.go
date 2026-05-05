@@ -80,7 +80,6 @@ func (patch *BilinearPatch) InsideQuad(sample Sample) bool {
 		edgeFunction2D(patch.CornerP10, patch.CornerP00, sample.X, sample.Y) >= 0
 }
 
-// Evaluate возвращает точку на поверхности патча для заданных параметров u и v.
 func (patch *BilinearPatch) EvaluatePos(u, v float32) mgl32.Vec3 {
 	return EvaluateBilinearVec3(patch.CornerP00, patch.CornerP10, patch.CornerP01, patch.CornerP11, u, v)
 }

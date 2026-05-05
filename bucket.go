@@ -3,22 +3,15 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
-	_ "image/png" // для поддержки PNG
 
 	"github.com/go-gl/mathgl/mgl32"
 )
-
-type SubImage interface {
-	SubImage(r image.Rectangle) image.Image
-	Set(x, y int, c color.Color)
-}
 
 type Bucket struct {
 	zBuffer        []float32
 	SizeX, SizeY   int
 	StartX, StartY int
-	ColorImage     SubImage
+	ColorImage     *image.RGBA
 	Primitives     []BilinearPatch
 }
 
@@ -28,7 +21,7 @@ func (bucket *Bucket) toBoundBox() (bound BoundBox) {
 	return
 }
 
-func NewBacket(startX, startY, sizeX, sizeY int, imageSrc image.Image) *Bucket {
+func NewBucket(startX, startY, sizeX, sizeY int, imageSrc *image.RGBA) *Bucket {
 	bucket := &Bucket{}
 	bucket.zBuffer = make([]float32, sizeX*sizeY)
 	bucket.StartX = startX
@@ -36,12 +29,10 @@ func NewBacket(startX, startY, sizeX, sizeY int, imageSrc image.Image) *Bucket {
 	bucket.SizeX = sizeX
 	bucket.SizeY = sizeY
 	cropRect := image.Rect(startX, startY, startX+sizeX, startY+sizeY)
-	if subImage, ok := imageSrc.(SubImage); ok {
-		bucket.ColorImage = subImage.SubImage(cropRect).(SubImage)
-	}
+	bucket.ColorImage = imageSrc.SubImage(cropRect).(*image.RGBA)
 
-	for index := range bucket.zBuffer {
-		bucket.zBuffer[index] = 1.0
+	for i := range bucket.zBuffer {
+		bucket.zBuffer[i] = 1.0
 	}
 	return bucket
 }
@@ -50,17 +41,24 @@ func (bucket *Bucket) AddPrimitive(patch BilinearPatch) {
 	bucket.Primitives = append(bucket.Primitives, patch)
 }
 
+func (bucket *Bucket) setPixel(x, y int, color mgl32.Vec4) {
+	i := bucket.ColorImage.PixOffset(x, y)
+	bucket.ColorImage.Pix[i] = uint8(color[0] * 255)
+	bucket.ColorImage.Pix[i+1] = uint8(color[1] * 255)
+	bucket.ColorImage.Pix[i+2] = uint8(color[2] * 255)
+	bucket.ColorImage.Pix[i+3] = uint8(color[3] * 255)
+}
+
 func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) mgl32.Vec3) {
 	fmt.Printf("bucket len: %d\n", len(bucket.Primitives))
 	var micropolygon BilinearPatch
 	grid := NewGrid(100, 100)
 
 	for _, patch := range bucket.Primitives {
-
-		backetStartX := bucket.StartX
-		backetStartY := bucket.StartY
-		backetEndX := bucket.StartX + bucket.SizeX
-		backetEndY := bucket.StartY + bucket.SizeY
+		bucketStartX := bucket.StartX
+		bucketStartY := bucket.StartY
+		bucketEndX := bucket.StartX + bucket.SizeX
+		bucketEndY := bucket.StartY + bucket.SizeY
 
 		patchScreen := patch.Project(projectToScreen)
 		patchScreenBB := patchScreen.ToBoundBox()
@@ -92,11 +90,10 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 				bbMicropolygon := micropolygon.ToBoundBox()
 				bStartX, bStartY, bEndX, bEndY := bbMicropolygon.Int()
 
-				startX := max(backetStartX, bStartX)
-				startY := max(backetStartY, bStartY)
-
-				endX := min(backetEndX, bEndX)
-				endY := min(backetEndY, bEndY)
+				startX := max(bucketStartX, bStartX)
+				startY := max(bucketStartY, bStartY)
+				endX := min(bucketEndX, bEndX)
+				endY := min(bucketEndY, bEndY)
 
 				for x := startX; x < endX; x++ {
 					for y := startY; y < endY; y++ {
@@ -104,8 +101,8 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 						if !micropolygon.InsideQuad(sample) {
 							continue
 						}
-						zposX := x - backetStartX
-						zposY := y - backetStartY
+						zposX := x - bucketStartX
+						zposY := y - bucketStartY
 						uLocal, vLocal := micropolygon.UnprojectToUV(sample)
 						vpos := micropolygon.EvaluatePos(uLocal, vLocal)
 
@@ -115,7 +112,7 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 
 						bucket.zBuffer[zposX+zposY*bucket.SizeX] = vpos.Z()
 						resultColor := micropolygon.EvaluateColor(uLocal, vLocal)
-						bucket.ColorImage.Set(x, y, color.RGBA{R: uint8(resultColor.X() * 255), G: uint8(resultColor.Y() * 255), B: uint8(resultColor.Z() * 255), A: 255})
+						bucket.setPixel(x, y, resultColor.Vec4(1.0))
 					}
 				}
 			}
