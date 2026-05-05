@@ -7,11 +7,17 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"runtime/pprof"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 ) // Это магический импорт, который регистрирует эндпоинты /debug/pprof/
 
 var rocketTexture image.Image
+
+func ColorShader(position mgl32.Vec3, uv mgl32.Vec2) mgl32.Vec3 {
+
+	return mgl32.Vec3{1.0, 0, 0}
+}
 
 func SampleNear(img image.Image, u, v float32) color.Color {
 	bounds := img.Bounds()
@@ -118,8 +124,11 @@ func main() {
 
 	render := NewRender(width, height, 32)
 	render.SetProjectionMatrix(proj)
-	render.Draw(model.Patches, 5)
 
+	startTime := time.Now()
+	render.Draw(model.Patches, 5)
+	elapsed := time.Since(startTime)
+	fmt.Printf("Время выполнения: %v\n", elapsed)
 	render.save("render_image/render.png")
 	pprof.WriteHeapProfile(f)
 }

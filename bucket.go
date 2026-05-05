@@ -53,6 +53,7 @@ func (bucket *Bucket) AddPrimitive(patch BilinearPatch) {
 func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) mgl32.Vec3) {
 	fmt.Printf("bucket len: %d\n", len(bucket.Primitives))
 	var micropolygon BilinearPatch
+	grid := NewGrid(100, 100)
 
 	for _, patch := range bucket.Primitives {
 
@@ -64,7 +65,15 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 		patchScreen := patch.Project(projectToScreen)
 		patchScreenBB := patchScreen.ToBoundBox()
 
-		grid, Nx, Ny := patch.Dice(dicingRate, patchScreenBB)
+		Nx, Ny := patch.Dice(grid, dicingRate, patchScreenBB)
+		totalVertex := (Nx + 1) * (Ny + 1)
+		for idx := range totalVertex { // Shader
+			grid.Color[idx] = ColorShader(grid.Positions[idx], grid.UV[idx])
+		}
+
+		for idx := range totalVertex { // Project to Screen
+			grid.Positions[idx] = projectToScreen(grid.Positions[idx])
+		}
 
 		gridWidth := Nx + 1
 
@@ -75,17 +84,10 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 				micropolygon.CornerP10 = grid.Positions[(i+1)+j*gridWidth]
 				micropolygon.CornerP11 = grid.Positions[(i+1)+(j+1)*gridWidth]
 
-				micropolygon.UV00 = grid.UV[i+j*gridWidth]
-				micropolygon.UV01 = grid.UV[i+(j+1)*gridWidth]
-				micropolygon.UV10 = grid.UV[(i+1)+j*gridWidth]
-				micropolygon.UV11 = grid.UV[(i+1)+(j+1)*gridWidth]
-
-				micropolygon = micropolygon.Project(projectToScreen)
-
-				micropolygon.Color00 = SampleNear(rocketTexture, micropolygon.UV00.X(), micropolygon.UV00.Y())
-				micropolygon.Color01 = SampleNear(rocketTexture, micropolygon.UV01.X(), micropolygon.UV01.Y())
-				micropolygon.Color10 = SampleNear(rocketTexture, micropolygon.UV10.X(), micropolygon.UV10.Y())
-				micropolygon.Color11 = SampleNear(rocketTexture, micropolygon.UV11.X(), micropolygon.UV11.Y())
+				micropolygon.Color00 = grid.Color[i+j*gridWidth]
+				micropolygon.Color01 = grid.Color[i+(j+1)*gridWidth]
+				micropolygon.Color10 = grid.Color[(i+1)+j*gridWidth]
+				micropolygon.Color11 = grid.Color[(i+1)+(j+1)*gridWidth]
 
 				bbMicropolygon := micropolygon.ToBoundBox()
 				bStartX, bStartY, bEndX, bEndY := bbMicropolygon.Int()
@@ -102,21 +104,18 @@ func (bucket *Bucket) Draw(dicingRate float32, projectToScreen func(mgl32.Vec3) 
 						if !micropolygon.InsideQuad(sample) {
 							continue
 						}
-
-						uLocal, vLocal := micropolygon.UnprojectToUV(sample)
-						vpos := micropolygon.EvaluatePos(uLocal, vLocal)
 						zposX := x - backetStartX
 						zposY := y - backetStartY
+						uLocal, vLocal := micropolygon.UnprojectToUV(sample)
+						vpos := micropolygon.EvaluatePos(uLocal, vLocal)
 
 						if bucket.zBuffer[zposX+zposY*bucket.SizeX] < vpos.Z() {
 							continue
 						}
 
 						bucket.zBuffer[zposX+zposY*bucket.SizeX] = vpos.Z()
-						resultUV := micropolygon.EvaluateUV(uLocal, vLocal)
-						pixelColor := SampleBilinear(rocketTexture, resultUV.X(), resultUV.Y())
-						bucket.ColorImage.Set(x, y, pixelColor)
-						// bucket.ColorImage.Set(x, y, micropolygon.Color)
+						resultColor := micropolygon.EvaluateColor(uLocal, vLocal)
+						bucket.ColorImage.Set(x, y, color.RGBA{R: uint8(resultColor.X() * 255), G: uint8(resultColor.Y() * 255), B: uint8(resultColor.Z() * 255), A: 255})
 					}
 				}
 			}
