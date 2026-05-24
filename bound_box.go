@@ -1,10 +1,6 @@
 package main
 
-import (
-	"math"
-
-	"github.com/go-gl/mathgl/mgl32"
-)
+import "github.com/go-gl/mathgl/mgl32"
 
 type BoundBox struct {
 	Min mgl32.Vec3
@@ -23,10 +19,15 @@ func (b BoundBox) Intersects(other BoundBox) bool {
 }
 
 func (b *BoundBox) Int() (startX, startY, endX, endY int) {
-	startX = int(math.Floor(float64(b.Min.X())))
-	startY = int(math.Floor(float64(b.Min.Y())))
-
-	endX = int(math.Ceil(float64(b.Max.X())))
-	endY = int(math.Ceil(float64(b.Max.Y())))
+	startX = int(b.Min.X())
+	startY = int(b.Min.Y())
+	endX = int(b.Max.X())
+	if float32(endX) < b.Max.X() {
+		endX++
+	}
+	endY = int(b.Max.Y())
+	if float32(endY) < b.Max.Y() {
+		endY++
+	}
 	return
 }

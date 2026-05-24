@@ -22,24 +22,26 @@ func EvaluateBilinear[T any](p00, p10, p01, p11 T, u, v float32, mul func(T, flo
 }
 
 func EvaluateBilinearVec3(p00, p10, p01, p11 mgl32.Vec3, u, v float32) mgl32.Vec3 {
-	return EvaluateBilinear(p00, p10, p01, p11, u, v,
-		func(v mgl32.Vec3, s float32) mgl32.Vec3 { return v.Mul(s) },
-		func(v1, v2 mgl32.Vec3) mgl32.Vec3 { return v1.Add(v2) },
-	)
+	w00 := (1 - u) * (1 - v)
+	w10 := u * (1 - v)
+	w01 := (1 - u) * v
+	w11 := u * v
+	return mgl32.Vec3{
+		p00[0]*w00 + p10[0]*w10 + p01[0]*w01 + p11[0]*w11,
+		p00[1]*w00 + p10[1]*w10 + p01[1]*w01 + p11[1]*w11,
+		p00[2]*w00 + p10[2]*w10 + p01[2]*w01 + p11[2]*w11,
+	}
 }
 
 func EvaluateBilinearVec2(p00, p10, p01, p11 mgl32.Vec2, u, v float32) mgl32.Vec2 {
-	return EvaluateBilinear(p00, p10, p01, p11, u, v,
-		func(v mgl32.Vec2, s float32) mgl32.Vec2 { return v.Mul(s) },
-		func(v1, v2 mgl32.Vec2) mgl32.Vec2 { return v1.Add(v2) },
-	)
-}
-
-func EvaluateBilinearFloat(p00, p10, p01, p11 float32, u, v float32) float32 {
-	return EvaluateBilinear(p00, p10, p01, p11, u, v,
-		func(f float32, s float32) float32 { return f * s },
-		func(f1, f2 float32) float32 { return f1 + f2 },
-	)
+	w00 := (1 - u) * (1 - v)
+	w10 := u * (1 - v)
+	w01 := (1 - u) * v
+	w11 := u * v
+	return mgl32.Vec2{
+		p00[0]*w00 + p10[0]*w10 + p01[0]*w01 + p11[0]*w11,
+		p00[1]*w00 + p10[1]*w10 + p01[1]*w01 + p11[1]*w11,
+	}
 }
 
 func PerspectiveZO(fovy, aspect, near, far float32) mgl32.Mat4 {

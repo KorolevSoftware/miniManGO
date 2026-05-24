@@ -133,7 +133,7 @@ func (patch *BilinearPatch) UnprojectToUV(sample Sample) (u, v float32) {
 	rhs := mgl32.Vec3{sample.X, sample.Y, 0.0}.Sub(patch.CornerP00)
 	det := B.X()*C.Y() - B.Y()*C.X()
 
-	if math.Abs(float64(det)) < 1e-6 {
+	if det > -1e-6 && det < 1e-6 {
 		return 0, 0
 	}
 	u = (rhs.X()*C.Y() - rhs.Y()*C.X()) / det
